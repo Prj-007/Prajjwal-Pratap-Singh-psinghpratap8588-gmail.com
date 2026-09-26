@@ -88,6 +88,47 @@ demonstrate, and it would not have survived.
 _This is where most people's first model is wrong. Write down the model you started with, the
 observation that broke it, and the model you moved to. Be specific about the observation._
 
+### 2026-09-26 · the engine (permissions.js), before context.js
+
+Model going in: membership → suspended → any applicable deny → role or allow grant → implicit.
+Deny is checked before the role, so an org-wide deny beats the baseline and a device allow.
+Predicted `check-permissions.js` 35/35 and `npm run personalisation` 18/18. Both passed first run
+(cf826e2) — so this phase has no wrong prediction yet, and the public suites were not where the
+risk was.
+
+### 2026-09-26 · the laundering hole the public suites cannot see
+
+`resolve(deviceId = null)` is the org-level *union* (allowed if the org scope or any one device
+allows). Reusing it for `assertMayGrant(…, deviceId = null)` would let a viewer with `device:control`
+on one device grant `device:control` org-wide. Made the org-wide grant check use the org scope
+only. Wrote `scripts/check-permissions-edges.js` (13 cases). Mutant — union in `assertMayGrant`:
+edges 12/13 (`...may NOT grant it org-wide` → `ok`), `check-permissions` still 35/35,
+personalisation still 18/18.
+
+### 2026-09-26 · measured: queries per resolve
+
+Wrapped `db.prepare` and counted. `resolveDevices` with 1, 3, 5 Acme devices: 4, 4, 4 queries
+(catalogue, membership, baseline, grants). `resolve` org-level: 4. One device: 5 — the extra is
+the "is this a live device of this org" check. Nothing scales with the number of rows.
+
+### 2026-09-26 · left open by the documents — settled here
+
+- **Provenance of an allow.** Tests only pin the grant form (`grant:<id>`). Chose `source: role:<key>,
+  reason: role` and `source: grant:<id>, reason: grant`. When both allow, the role is reported.
+- **Which deny is named** when several apply: the oldest (`ORDER BY created_at, id`), so the answer
+  is stable between requests.
+- **Org-level union with no devices.** The org scope itself counts as one candidate, so a role
+  baseline still shows `device:list` in an org with zero devices.
+- **Device not in this org, or soft-deleted:** everything denied with `scope_mismatch` (a reason
+  listed in `PERMISSIONS.md §5` but not defined there). Grants on it stop counting in the union.
+- **Grants reaching across orgs.** Schema allows `grants.org_id = A` with a device of org B. The
+  grants query only counts a device-scoped grant whose device is live in the grant's own org.
+- **Invited / removed membership** resolve as `not_a_member`; a soft-deleted org likewise.
+- **Deny grants also need the permission held.** "Only grant authority you hold" applied to both
+  effects — the conservative reading.
+- `resolveDevices` trusts the caller's `deviceIds` (they come from the org's own device query) and
+  does not re-check each one — keeps it at 4 queries. The list route must not pass foreign ids.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
