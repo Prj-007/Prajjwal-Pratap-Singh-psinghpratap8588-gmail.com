@@ -129,6 +129,27 @@ the "is this a live device of this org" check. Nothing scales with the number of
 - `resolveDevices` trusts the caller's `deviceIds` (they come from the org's own device query) and
   does not re-check each one — keeps it at 4 queries. The list route must not pass foreign ids.
 
+### 2026-09-26 · context.js — token to caller
+
+Order: bearer → `verifyAccessToken` → `sub`/`org` present → path `:org` must equal the token's
+`org` (404, before any query) → membership active in a live org (401) → `assertFresh` → suspension.
+No route exists yet, so `check-api.js` cannot reach it; wrote `scripts/check-context.js` (24 cases)
+calling `authenticate()` with fake requests. 24/24.
+Predicted: a token issued *before* a suspension comes back `401 TOKEN_STALE`, not `403 suspended`,
+because suspending bumps `perm_version` and freshness runs first. Observed exactly that; only a
+token minted after the suspension reaches the 403. So the client sees stale → refresh → 403.
+Mutant — delete the path-org check: 22/24, and the failure reads `got ok u1@oa owner` for a
+request to org B's URL. Without it a route reading `params.org` would serve B's rows under A's
+authority. With it, "org B, where you are a member" and "an org that doesn't exist" are the same 404.
+
+### 2026-09-26 · left open — what a suspended member can still reach
+
+`AUTH-DATA-MODEL.md §10`: suspended → "`403` with an empty permission set". §7: "the token still
+verifies". Neither says whether *every* route refuses. Refusing all of them means a user suspended
+in org A cannot call `POST /v1/auth/token` to switch to org B, where they are fine. Settled: 403
+`suspended` by default, open on `GET /v1/auth/me` (shows the empty set), `GET /v1/orgs`,
+`POST /v1/auth/token`. Removed / invited / deleted org → 401, as §10 says for `removed`.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
