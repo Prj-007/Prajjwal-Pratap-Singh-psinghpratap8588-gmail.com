@@ -70,13 +70,50 @@ export function issueAccessToken({ userId, orgId, role, permVersion }, secret) {
 // AUTH-DATA-MODEL.md §10 lists the failure modes; §2 defines the claim set.
 // `node scripts/check-jwt.js` is the public test suite for this function.
 // ---------------------------------------------------------------------------
+// Returns the parsed JSON, or null if it does not parse. It may still be a non-object
+// (array, string, number) — callers reject those because the fields they check are absent.
+// JSON `null` is the only one whose property read would throw, and `!value` catches it.
+function decodeSegment(segment) {
+  try {
+    return JSON.parse(unb64(segment).toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Order matters: nothing in the payload is read until the signature over it has checked out.
 export function verifyAccessToken(token, secret) {
-  // YOURS TO WRITE. Every failure mode listed above must be a 401 UNAUTHENTICATED.
-  // `node scripts/check-jwt.js` is the public suite for this function.
-  throw Object.assign(
-    new Error('TODO: server/auth.js — verifyAccessToken() is yours to write (AUTH-DATA-MODEL.md §10).'),
-    { code: 'NOT_IMPLEMENTED' }
-  );
+  if (typeof token !== 'string') throw unauthenticated('missing token');
+
+  const parts = token.split('.');
+  if (parts.length !== 3) throw unauthenticated('malformed token');
+  const [h, p, sig] = parts;
+
+  // Read the header only to refuse it. The algorithm used below is ALG, never header.alg.
+  const header = decodeSegment(h);
+  if (!header || header.alg !== ALG || header.typ !== 'JWT') throw unauthenticated('bad token header');
+
+  // Compare the encoded strings, not decoded bytes: Buffer's base64url decoder skips
+  // characters it does not recognise, so `${sig}!!` decodes to the same 32 bytes as `${sig}`.
+  const expected = Buffer.from(createHmac('sha256', secret).update(`${h}.${p}`).digest('base64url'));
+  const given = Buffer.from(sig);
+  // timingSafeEqual throws on unequal lengths, so the length check has to come first.
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+    throw unauthenticated('bad token signature');
+  }
+
+  const claims = decodeSegment(p);
+  if (!claims) throw unauthenticated('bad token payload');
+
+  // exp == now is expired: the token is valid for [iat, exp), not [iat, exp].
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || claims.exp <= now) {
+    throw unauthenticated('token expired');
+  }
+  if (claims.iss !== ISS || claims.aud !== AUD) throw unauthenticated('token not issued for this api');
+  if (typeof claims.jti !== 'string' || claims.jti === '') throw unauthenticated('token has no jti');
+
+  return claims;
 }
 
 
