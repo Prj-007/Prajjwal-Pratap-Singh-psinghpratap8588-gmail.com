@@ -1,29 +1,46 @@
 // Append-only audit writes.
 //
-// YOURS TO WRITE. This file ships as a stub.
+// audit_events has BEFORE UPDATE / BEFORE DELETE triggers, so this module only ever INSERTs.
 //
-// audit_events has BEFORE UPDATE / BEFORE DELETE triggers, so this module only ever
-// INSERTs. Two things the spec is explicit about (BRIEF.md §4, PERMISSIONS.md §8):
-//
-//   - DENIED attempts are recorded, not just successes. A log that only holds
-//     successes cannot answer "who tried to change what".
-//   - a single action produces a single row. Write the success row inside the same
-//     transaction as the change it describes; do not also log the allow from a wrapper.
-//
-// Schema columns: id, org_id (NOT NULL), actor_id, action, target_type, target_id,
-// result ('allow'|'deny'), reason_code, request_id, at.
+//   - DENIED attempts are recorded, not just successes.
+//   - one action, one row. The success row is written by the route inside the same
+//     transaction as the change; auditDenials only ever writes the deny row.
 
-const todo = (name) =>
-  Object.assign(
-    new Error(`TODO: server/audit.js — ${name}() is yours to write (BRIEF.md §3).`),
-    { code: 'NOT_IMPLEMENTED' }
-  );
+import { newId, nowIso } from './db.js';
+import { HttpError } from './http.js';
 
-export function audit(db, { orgId, actorId, action, targetType, targetId, result, reasonCode, requestId }) {
-  throw todo('audit');
+export function audit(db, { orgId, actorId = null, action, targetType = null, targetId = null, result, reasonCode = null, requestId = null }) {
+  const id = newId('aud');
+  db.prepare(
+    `INSERT INTO audit_events (id, org_id, actor_id, action, target_type, target_id, result, reason_code, request_id, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, orgId, actorId, action, targetType, targetId, result, reasonCode, requestId, nowIso());
+  return id;
 }
 
+// Only a 403 is a refused permission. A 404 is "not visible" (recording it would log a
+// row about something the caller cannot see), and a 400 is a malformed request.
+const isRefusal = (err) => err instanceof HttpError && err.status === 403;
+
 // Run fn(); if it refuses with a permission error, record the denial before rethrowing.
+// Works for a plain function and for one that returns a promise.
 export function auditDenials(db, ctx, meta, fn) {
-  throw todo('auditDenials');
+  const record = (err) => {
+    if (isRefusal(err)) {
+      audit(db, {
+        orgId: ctx.orgId, actorId: ctx.userId, requestId: ctx.requestId,
+        action: meta.action, targetType: meta.targetType, targetId: meta.targetId,
+        result: 'deny', reasonCode: err.reason ?? err.code,
+      });
+    }
+    throw err;
+  };
+
+  let out;
+  try {
+    out = fn();
+  } catch (err) {
+    record(err);
+  }
+  return out && typeof out.then === 'function' ? out.catch(record) : out;
 }
