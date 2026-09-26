@@ -47,8 +47,41 @@ checks only; the `pv` check runs where the membership row is loaded (`context.js
 
 ## Phase 1 — token verification
 
-_What did you expect each failure mode to look like before you ran it? Which one behaved
-differently from your expectation, and what did that tell you?_
+### 2026-09-26 · predictions before writing it
+
+1. `timingSafeEqual` throws on unequal lengths → a truncated signature would be a crash, not a 401.
+2. A header of JSON `null` parses fine, then `header.alg` throws `TypeError`.
+3. Node's base64url decoder is lenient, so decode-then-compare may accept a padded signature.
+Checked all three in a one-off `node -e` before writing code. All true:
+`ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH`; `TypeError`; and `sig+'!!'`, `sig+'.'`, `'!'+sig` each
+decode to the same 32 bytes as `sig`. (3) decided the design: compare the *encoded* signature
+string against the expected base64url string, length first, then `timingSafeEqual`.
+
+### 2026-09-26 · 43/43, and a test the public suite can't fail
+
+`check-jwt.js`: 43 passed. Predicted "header is not an object" would not actually exercise an
+object check — its `b64()` passes strings through raw, so the header is `HS256`, not `"HS256"`,
+and dies in `JSON.parse`. So the public suite never feeds valid-JSON-non-object segments.
+Wrote `scripts/check-jwt-edges.js` (15 cases) for that and the lenient-decoder signatures.
+Mutant A — swap in decoded-bytes comparison: edges 12/15 (all three padded signatures
+**accepted**), public suite still **43/43**. The public suite cannot tell the two designs apart.
+
+### 2026-09-26 · wrong about the object check — reversed
+
+Had `isPlainObject` in `decodeSegment`, commented "each of those… breaks the first property read
+with a TypeError". Mutant B — delete it: still 15/15 and 43/43. Wrong: only `null` throws on a
+property read, and `!header` / `!claims` already reject `null`; arrays, strings and numbers have no
+`.alg`/`.exp` and fall out as clean 401s. Removed the helper, rewrote the comment to say what
+actually holds (58ef6d8). The claim in the old comment was the kind a reviewer would ask me to
+demonstrate, and it would not have survived.
+
+### 2026-09-26 · left open by the documents
+
+- `aud` as an array: RFC 7519 allows it; nothing here says to. Rejected — we only ever issue a
+  string, so an array `aud` was not minted by us. Covered in `check-jwt-edges.js`.
+- `iat`/`nbf` in the future: not listed in the TODO or §10, not checked. Only we can sign, so a
+  future `iat` means a clock problem on our side, not a forgery.
+- `sub`/`org` presence is not checked here; `context.js` needs them and should refuse there.
 
 ## Phase 2 — caller context and the resolution engine
 
@@ -87,3 +120,8 @@ chose not to build belongs here with its reason._
 
 _Things you know are wrong, unfinished, or that you would do differently with another day. Listing
 these honestly is worth more than pretending they do not exist — we will find them anyway._
+
+- `server/index.js:22` — `DIST` uses `new URL(...).pathname`, the same bug fixed in `load-db.js`.
+  Only hit by `npm start` (production static serving) on Windows. Not fixed yet.
+- `package.json` scripts assume a POSIX shell: `db:reset` uses `rm -f`, `start` uses
+  `NODE_ENV=production node ...`. `rm` worked here only because Git's `rm` is on PATH.
