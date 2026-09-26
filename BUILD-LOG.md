@@ -11,23 +11,39 @@ gives nothing away.
 
 ---
 
-<!-- EXAMPLE — delete this block, keep the shape.
-
-## 2026-03-04 · Phase 0 — orientation
-
-Expected the unknown-permission test to fail on my validation code.
-Observed: it passed, with foreign_keys ON, and *also* passed with the pragma removed — so the
-check was never running, and the "pass" was the schema loading fine while enforcing nothing.
-Changed: moved `foreign_keys = ON` to connection open and re-ran; now it raises
-`FOREIGN KEY constraint failed` as the README said it would.
-Note: this is the failure mode where a passing test is worse than a failing one.
-
--->
-
 ## Phase 0 — orientation
 
-_Installed, reset the database, read the documents, ran the suites against the untouched skeleton.
-What did the starting line actually look like, and which failure surprised you?_
+### 2026-09-26 · where the hand-out came from
+
+The public `rhinostream/Hackathons` repo contains more than the hand-out: `q1-starter/` (its root
+README calls it "the reference implementation, not a starter"), `DISCOVERY-RUBRIC.md` and
+`HARDENING.md` (marked organiser-only). The root README was read before it was clear it was
+organiser-facing. Those three were not opened. This repo was created empty and seeded from
+`starter/` only (commit f4a6479), so none of it is in this history. To report to the organisers.
+
+### 2026-09-26 · baseline against the untouched skeleton
+
+Node 20.12.2 here; `.nvmrc` says 22. `npm install` fine on 20, no `engines` field.
+Predicted `check-jwt.js` would be 0/43, not "rejections pass by accident": the stub throws a
+plain `Error`, and the suite compares `${status} ${code}`. Observed: 0 passed, 43 failed. Right.
+`check-permissions.js` does not report failures at all — it crashes on the first stub call.
+
+### 2026-09-26 · db:reset broken on Windows
+
+`npm run db:reset` → `ENOENT ... open 'C:\C:\Users\...\db\schema.sql'`. The doubled drive is
+`new URL(p, import.meta.url).pathname` returning `/C:/...`, which `fs` resolves against the
+current drive. `fileURLToPath` in `scripts/load-db.js` fixes it (a5d451a). Same pattern at
+`server/index.js:22` (the `dist/` path for `npm start`) — left alone for now, see Open threads.
+Reset now seeds 3 orgs and **20** permissions, not the documented 19: the overlay adds role
+`reviewer` and permission `device:reboot` (allow on one device, deny on another).
+
+### 2026-09-26 · the spec asks more of `verifyAccessToken` than its signature allows
+
+`AUTH-DATA-MODEL.md §10` lists "a token whose `pv` is stale, as `401 TOKEN_STALE`" among the
+things `verifyAccessToken` must refuse. But it is `verifyAccessToken(token, secret)` — no DB, no
+membership, so it cannot know the current `perm_version`. `auth.js` already exports
+`assertFresh(claims, membership)` for exactly this. Settled: the verifier does signature and claim
+checks only; the `pv` check runs where the membership row is loaded (`context.js`).
 
 ## Phase 1 — token verification
 
