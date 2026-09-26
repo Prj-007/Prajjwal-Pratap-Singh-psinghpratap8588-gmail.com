@@ -169,6 +169,44 @@ in org A cannot call `POST /v1/auth/token` to switch to org B, where they are fi
   written here (`check-context.js`, `check-permissions-edges.js`). Real HTTP behaviour (headers,
   body parsing, error shape on the wire) is still unverified.
 
+## Phase 2c — audit.js and lifecycle.js (before any route)
+
+### 2026-09-27 · the expired session that would hold a device forever
+
+Reading `one_exclusive_session_per_device` (`WHERE state = 'active' AND mode IN ('control','terminal')`):
+nothing flips `state` when `expires_at` passes. Predicted: an expired-but-`active` control row
+blocks the next control session on that device indefinitely. Tested before writing the fix — the
+insert fails with `UNIQUE constraint failed: sessions.device_id`. Added `expireStaleSessions()`
+(marks them `session_expired`, `ended_at = expires_at`); after it the same insert succeeds. The
+session route has to call it before inserting, or the TTL that makes grandfathering safe (§7)
+never actually releases anything.
+
+### 2026-09-27 · no role key in the code
+
+`assertNotLastOwner` needs to know which role is "owner". Wrote it as the highest-ranked row in
+`roles` rather than the string `'owner'`. `check-lifecycle.js` adds an undocumented `steward`
+(rank 35) and the rank rules pick it up: operator (30) cannot modify it, admin (40) can assign it.
+Noticed while writing the cases: operator → auditor passes the rank check (30 > 20). That is
+right — rank is only the *second* gate; the route still needs `user:role:update`, which operator
+does not hold. Rank never answers "may you", only "may you, over them".
+
+### 2026-09-27 · left open — settled here
+
+- **Admin assigning admin.** §6 forbids modifying an equal and assigning `owner` unless owner;
+  silent on creating an equal. Refused: two admins could never act on each other afterwards.
+  The top role may assign itself, or no org could ever gain a second owner.
+- **Last owner counts active owners only.** A suspended owner cannot act for the org, so an org
+  whose only *active* owner leaves is ownerless in practice.
+- **What `auditDenials` records.** Only 403. A 404 is "invisible" — logging it writes a row about a
+  resource the caller cannot see; a 400 is a malformed request, not a refusal.
+- **`endActiveSessions` with no user and no device** throws instead of ending every session in the
+  org. A missing argument should fail loudly, not widen the blast radius.
+- **Snapshot shape** follows the seed's `authorizedBy` (`role`, `grantIds`, `snapshotAt`) plus
+  `permissions`. `grantIds` comes from the `source` of the engine's own answers — not a second
+  copy of the "which grants are active" query.
+
+32/32 first run. No wrong prediction this round; the risk is in how the routes use these.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
