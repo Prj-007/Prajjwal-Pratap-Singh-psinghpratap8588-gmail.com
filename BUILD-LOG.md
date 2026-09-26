@@ -150,6 +150,25 @@ in org A cannot call `POST /v1/auth/token` to switch to org B, where they are fi
 `suspended` by default, open on `GET /v1/auth/me` (shows the empty set), `GET /v1/orgs`,
 `POST /v1/auth/token`. Removed / invited / deleted org → 401, as §10 says for `removed`.
 
+### 2026-09-26 · problems hit so far that are not above
+
+- **A shell edit ate backslashes.** Adding the comment in `scripts/load-db.js` through `sed`, the
+  string `'C:\\C:\\...'` came out as `'C:C:...'` — two layers of escaping (bash, then sed). Caught
+  by reading the file back before committing; fixed with a plain edit. Rule since: no `sed` for
+  anything containing backslashes.
+- **Rewording an old commit broke this log.** Reworded one commit message with
+  `git filter-branch --msg-filter` (unpushed, dates preserved — checked author and committer
+  dates before/after). Every later commit got a new hash, and three hashes quoted in this file
+  pointed at nothing. Fixed in 69a2627. Lesson: quoting hashes in a log ties it to history that
+  must not be rewritten after that point.
+- **"LF will be replaced by CRLF" on every commit.** `core.autocrlf=true` on this machine.
+  `git ls-files --eol` shows `i/lf` for committed files, so the repository stores LF and the
+  graders' checkout is unaffected. Noise, not a bug; left alone.
+- **Three modules in, no public suite reaches them end to end.** `check-api.js` and the UI suite
+  need routes, so `context.js` and the permission scope rules are covered only by the scripts
+  written here (`check-context.js`, `check-permissions-edges.js`). Real HTTP behaviour (headers,
+  body parsing, error shape on the wire) is still unverified.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
