@@ -32,7 +32,7 @@ plain `Error`, and the suite compares `${status} ${code}`. Observed: 0 passed, 4
 
 `npm run db:reset` → `ENOENT ... open 'C:\C:\Users\...\db\schema.sql'`. The doubled drive is
 `new URL(p, import.meta.url).pathname` returning `/C:/...`, which `fs` resolves against the
-current drive. `fileURLToPath` in `scripts/load-db.js` fixes it (a5d451a). Same pattern at
+current drive. `fileURLToPath` in `scripts/load-db.js` fixes it (9d6e4f0). Same pattern at
 `server/index.js:22` (the `dist/` path for `npm start`) — left alone for now, see Open threads.
 Reset now seeds 3 orgs and **20** permissions, not the documented 19: the overlay adds role
 `reviewer` and permission `device:reboot` (allow on one device, deny on another).
@@ -72,7 +72,7 @@ Had `isPlainObject` in `decodeSegment`, commented "each of those… breaks the f
 with a TypeError". Mutant B — delete it: still 15/15 and 43/43. Wrong: only `null` throws on a
 property read, and `!header` / `!claims` already reject `null`; arrays, strings and numbers have no
 `.alg`/`.exp` and fall out as clean 401s. Removed the helper, rewrote the comment to say what
-actually holds (58ef6d8). The claim in the old comment was the kind a reviewer would ask me to
+actually holds (fb34f13). The claim in the old comment was the kind a reviewer would ask me to
 demonstrate, and it would not have survived.
 
 ### 2026-09-26 · left open by the documents
@@ -93,7 +93,7 @@ observation that broke it, and the model you moved to. Be specific about the obs
 Model going in: membership → suspended → any applicable deny → role or allow grant → implicit.
 Deny is checked before the role, so an org-wide deny beats the baseline and a device allow.
 Predicted `check-permissions.js` 35/35 and `npm run personalisation` 18/18. Both passed first run
-(cf826e2) — so this phase has no wrong prediction yet, and the public suites were not where the
+(043db38) — so this phase has no wrong prediction yet, and the public suites were not where the
 risk was.
 
 ### 2026-09-26 · the laundering hole the public suites cannot see
