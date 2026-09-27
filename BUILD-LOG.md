@@ -462,6 +462,20 @@ assignable. The code was right; my test was the documented 5-role matrix the REA
 Rewrote it to assert the rule (no Owner/Admin, Operator present), not a list. 3/3, and
 `check-orgs.js` gained two `/roles` cases (43/43).
 
+### 2026-09-27 · steps 4–5 — grants, sessions, audit, admin
+
+Grants: the four grant cases in `ui.spec.js` passed first run, including the one that creates a
+grant through the form and checks, in a second browser context, that the viewer's
+`qa-android-01` row gains Terminal and `lab-win-01` does not. The permission checkboxes are the
+keys of the server's resolved set, so `device:reboot` is offered too — no catalogue in `web/`.
+Sessions: "Stop" is the one entry the inventory gates on *two* things (your own session, or
+`session:terminate`). The session list has no permissions on it, so the device rows'
+resolved sets (already fetched for names) answer `session:terminate` per device. Admin: `rename-org`
+and `delete-org` are separate `Gated` controls, which is what separates owner from admin
+(`admin has the Admin card but no delete entry`). A delete leaves the token pointing at an org
+that no longer exists, so the console re-reads via refresh and lands in another org or on
+sign-in. Added three session/audit cases to `console-extra.spec.js`; 5/5 with the two admin cases.
+
 ## Phase 8 — hardening
 
 _What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
