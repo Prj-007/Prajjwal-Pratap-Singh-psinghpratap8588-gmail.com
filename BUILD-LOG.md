@@ -19,7 +19,7 @@ The public `rhinostream/Hackathons` repo contains more than the hand-out: `q1-st
 README calls it "the reference implementation, not a starter"), `DISCOVERY-RUBRIC.md` and
 `HARDENING.md` (marked organiser-only). The root README was read before it was clear it was
 organiser-facing. Those three were not opened. This repo was created empty and seeded from
-`starter/` only (commit f4a6479), so none of it is in this history. To report to the organisers.
+`starter/` only (commit f4a6479), so none of it is in this history.
 
 ### 2026-09-26 · baseline against the untouched skeleton
 
