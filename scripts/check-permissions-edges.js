@@ -41,7 +41,7 @@ const at = (perm, deviceId = null) => resolve(db, { userId: 'u_view', orgId: 'oa
 grant('g_d1_ctl', 'd1', 'allow', 'device:control');
 
 console.log('\n== the org-level union counts a device-scoped allow ==');
-check('org level: device:control allowed via the d1 grant', at('device:control'), { effect: 'allow', source: 'grant:g_d1_ctl', reason: 'grant' });
+check('org level: device:control allowed via the d1 grant', at('device:control'), { effect: 'allow', source: 'grant:g_d1_ctl', reason: null });
 check('d2: device:control still implicit deny', at('device:control', 'd2').reason, 'implicit');
 
 console.log('\n== no laundering: an org-wide grant is checked at the org scope, not the union ==');

@@ -73,9 +73,9 @@ const everything = (keys, a) => Object.fromEntries(keys.map((k) => [k, a]));
 function decide(permission, grants, roleKey, roleSet) {
   const deny = grants.find((g) => g.effect === 'deny' && g.covers.has(permission));
   if (deny) return answer('deny', `grant:${deny.id}`, 'explicit_deny');
-  if (roleSet.has(permission)) return answer('allow', `role:${roleKey}`, 'role');
+  if (roleSet.has(permission)) return answer('allow', `role:${roleKey}`, null);
   const allow = grants.find((g) => g.effect === 'allow' && g.covers.has(permission));
-  if (allow) return answer('allow', `grant:${allow.id}`, 'grant');
+  if (allow) return answer('allow', `grant:${allow.id}`, null);
   return answer('deny', null, 'implicit');
 }
 
