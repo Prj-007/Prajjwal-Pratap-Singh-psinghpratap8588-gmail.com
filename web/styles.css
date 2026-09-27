@@ -40,3 +40,4 @@ code { font-size: 12px; }
 @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
 .notice.ok { background: #effaf2; border-color: #bfe3ca; color: #1c5b30; }
 .danger { border-color: #d98c8c; color: #8a1c1c; }
+.login-card { background: #fff; padding: 28px; border-radius: 10px; width: 340px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }

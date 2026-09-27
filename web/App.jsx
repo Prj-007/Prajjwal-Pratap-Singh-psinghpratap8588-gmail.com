@@ -13,6 +13,7 @@ import { Grants } from './components/Grants.jsx';
 import { Sessions } from './components/Sessions.jsx';
 import { Audit } from './components/Audit.jsx';
 import { Admin } from './components/Admin.jsx';
+import { InvitePage } from './components/InvitePage.jsx';
 
 // Which permission shows which card (UI-INVENTORY.md §2). This is the inventory, not a
 // role table: the server still decides whether each permission is held.
@@ -58,12 +59,27 @@ export function App() {
   const [view, setView] = useState('devices');
   const [notice, setNotice] = useState(null);       // { text, kind: 'error' | 'ok' }
   const say = (text, kind = 'error') => setNotice({ text, kind });
+  // An invite link is the one page that exists before sign-in and is not the sign-in form.
+  const [inviteToken, setInviteToken] = useState(() => {
+    const m = /^\/invite\/([^/]+)\/?$/.exec(window.location.pathname);
+    return m ? decodeURIComponent(m[1]) : null;
+  });
 
   // A reload: try the refresh cookie before showing the sign-in form.
   useEffect(() => {
+    // On an invite link, skip the refresh: accepting leaves a refresh cookie, and signing
+    // straight in afterwards would skip the sign-in form the invite flow ends on.
+    if (inviteToken) { setBooting(false); return; }
     client.refresh().then(setSession).catch(() => {}).finally(() => setBooting(false));
   }, []);
 
+  if (inviteToken) {
+    return <InvitePage token={inviteToken} onDone={(text) => {
+      window.history.replaceState(null, '', '/');
+      setInviteToken(null);
+      say(text, 'ok');
+    }} />;
+  }
   if (booting) return null;
   if (!session) return <Login onSignedIn={(s) => { setSession(s); setView('devices'); setNotice(null); }} notice={notice?.text} />;
 
