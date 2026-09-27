@@ -9,3 +9,4 @@ e2e.db-shm
 dist/
 test-results/
 playwright-report/
+check-auth.db*
