@@ -10,6 +10,9 @@ import { allows } from './components/Gated.jsx';
 import { Devices } from './components/Devices.jsx';
 import { People } from './components/People.jsx';
 import { Grants } from './components/Grants.jsx';
+import { Sessions } from './components/Sessions.jsx';
+import { Audit } from './components/Audit.jsx';
+import { Admin } from './components/Admin.jsx';
 
 // Which permission shows which card (UI-INVENTORY.md §2). This is the inventory, not a
 // role table: the server still decides whether each permission is held.
@@ -42,8 +45,10 @@ function renderView(key, props) {
     case 'devices': return <Devices {...props} />;
     case 'people': return <People {...props} />;
     case 'grants': return <Grants {...props} />;
+    case 'sessions': return <Sessions {...props} />;
+    case 'audit': return <Audit {...props} />;
+    case 'admin': return <Admin {...props} />;
     case undefined: return <p className="muted">Nothing here is available to you in this org.</p>;
-    default: return <p className="muted">Coming next.</p>;
   }
 }
 
@@ -80,6 +85,12 @@ export function App() {
       setSession(await client.switchOrg(org.id));
       setView('devices');
     } catch (err) { say(err.message); }
+  }
+
+  // Re-read who we are: the same org after a rename, or any remaining org after a delete.
+  async function reload(orgId) {
+    try { setSession(orgId ? await client.switchOrg(orgId) : await client.refresh()); }
+    catch { setSession(null); }
   }
 
   async function signOut() {
@@ -128,7 +139,7 @@ export function App() {
           ))}
         </nav>
         <main className="panel" key={`${session.orgId}:${current}`}>
-          {renderView(current, { orgId: session.orgId, orgPerms: session.permissions, session, say })}
+          {renderView(current, { orgId: session.orgId, orgPerms: session.permissions, session, say, reload })}
         </main>
       </div>
     </div>

@@ -41,3 +41,29 @@ test.describe('people', () => {
     await expect(picker.locator('option', { hasText: /^(Owner|Admin)$/ })).toHaveCount(0);
   });
 });
+
+test.describe('sessions and audit', () => {
+  const live = (page) => page.locator('[data-testid="session-row"][data-session-id="ses_live_build_server"]');
+
+  test('owner can stop someone else\'s live session (session:terminate on that device)', async ({ page }) => {
+    await login(page, 'dana@example.test');
+    await page.getByTestId('nav-sessions').click();
+    await expect(live(page).getByTestId('stop-session')).toHaveCount(1);
+    await expect(page.getByTestId('new-session')).toHaveCount(1);
+  });
+
+  test('operator can stop their own session', async ({ page }) => {
+    await login(page, 'sam@example.test');
+    await page.getByTestId('nav-sessions').click();
+    await expect(live(page).getByTestId('stop-session')).toHaveCount(1);
+  });
+
+  test('audit lists events, denials included once one has happened', async ({ page, request }) => {
+    const sam = await (await request.post('/v1/auth/login', { data: { email: 'sam@example.test', password: 'demo1234' } })).json();
+    await request.get('/v1/orgs/org_acme/audit', { headers: { authorization: `Bearer ${sam.token}` } });   // 403, audited
+    await login(page, 'dana@example.test');
+    await page.getByTestId('nav-audit').click();
+    await expect(page.locator('[data-testid="audit-row"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="audit-row"][data-result="deny"]').first()).toBeVisible();
+  });
+});
