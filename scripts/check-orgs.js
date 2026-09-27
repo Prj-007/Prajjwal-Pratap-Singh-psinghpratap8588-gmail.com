@@ -55,6 +55,12 @@ try {
   check('owner demotes another owner (two owners)', code(await call('PATCH', `${A}/members/usr_acme_owner`, { token: dana, body: { role: 'admin' } })), 200);
   check('...and the demoted owner\'s pv was bumped', peek.prepare("SELECT perm_version FROM memberships WHERE org_id='org_acme' AND user_id='usr_acme_owner'").get().perm_version, 2);
 
+  const assignableBy = async (t) => Object.fromEntries((await call('GET', `${A}/roles`, { token: t })).body.roles.map((r) => [r.key, r.assignable]));
+  const byOwner = await assignableBy(dana);
+  check('roles: owner may assign owner and viewer', [byOwner.owner, byOwner.viewer], [true, true]);
+  const byAdmin = await assignableBy(await tok('admin@acme.test'));
+  check('roles: admin may assign neither owner nor admin', [byAdmin.owner, byAdmin.admin, byAdmin.operator], [false, false, true]);
+
   console.log('\n== suspend / reinstate / remove ==');
   const sam = await tok('sam@example.test');
   check('suspend Sam', code(await call('POST', `${A}/members/usr_sam/suspend`, { token: dana })), 200);

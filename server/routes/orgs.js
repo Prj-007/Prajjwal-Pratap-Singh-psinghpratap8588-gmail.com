@@ -103,6 +103,18 @@ export function registerOrgRoutes(router, { db }) {
     send(res, 200, { id: ctx.orgId, deleted: true });
   }));
 
+  // The roles table, each marked with whether the caller may hand it out. The console builds
+  // its role pickers from this instead of carrying its own list — the grading fixture has
+  // roles no document names.
+  router.get('/v1/orgs/:org/roles', (ctx, _p, res) => {
+    const roles = db.prepare('SELECT key, label, rank FROM roles ORDER BY rank DESC').all().map((r) => {
+      let assignable = true;
+      try { assertCanAssign(db, ctx.role, r.key); } catch { assignable = false; }
+      return { ...r, assignable };
+    });
+    send(res, 200, { roles });
+  });
+
   // --- members -----------------------------------------------------------------
 
   router.get('/v1/orgs/:org/members', audited({ action: 'member.list' }, (ctx, _p, res) => {
