@@ -18,19 +18,23 @@ export function roleRanks(db) {
   return new Map(db.prepare('SELECT key, rank FROM roles').all().map((r) => [r.key, r.rank]));
 }
 
-const topRole = (db) => db.prepare('SELECT key FROM roles ORDER BY rank DESC LIMIT 1').get()?.key;
+export const topRole = (db) => db.prepare('SELECT key FROM roles ORDER BY rank DESC LIMIT 1').get()?.key;
 
 export function assertRoleExists(db, role) {
   if (typeof role !== 'string' || !roleRanks(db).has(role)) throw badRequest(`unknown role: ${role}`, 'unknown_role');
 }
 
 // You may act on a member only if your role ranks strictly above theirs. Equal is refused
-// (admin cannot modify admin).
+// (admin cannot modify admin) — except for the top role: owners must be able to act on
+// other owners, or a second owner could never be demoted by anyone.
 export function assertCanModify(db, callerRole, targetRole) {
   const ranks = roleRanks(db);
-  if (!ranks.has(callerRole) || !ranks.has(targetRole) || ranks.get(callerRole) <= ranks.get(targetRole)) {
+  if (!ranks.has(callerRole) || !ranks.has(targetRole)) {
     throw forbidden(`a ${callerRole} cannot modify a ${targetRole}`, 'insufficient_rank');
   }
+  if (ranks.get(callerRole) > ranks.get(targetRole)) return;
+  if (callerRole === targetRole && callerRole === topRole(db)) return;
+  throw forbidden(`a ${callerRole} cannot modify a ${targetRole}`, 'insufficient_rank');
 }
 
 // You may hand out (by invite or role change) only roles below your own — except the top
@@ -59,10 +63,11 @@ export function assertNotLastOwner(db, orgId, userId) {
   if (target && target.role === owner && target.status === 'active' && others === 0) throw lastOwner();
 }
 
-// End live sessions matching the filter. At least a user or a device is required, so a
-// missing argument can never end every session in the org. Returns how many ended.
-export function endActiveSessions(db, { orgId, userId = null, deviceId = null, reason, exceptSessionId = null }) {
-  if (!orgId || (!userId && !deviceId)) throw new Error('endActiveSessions needs orgId and a userId or deviceId');
+// End live sessions matching the filter. A user or a device is required unless the caller
+// says `allInOrg: true` (org deletion), so a missing argument can never end every session
+// in the org by accident. Returns how many ended.
+export function endActiveSessions(db, { orgId, userId = null, deviceId = null, reason, exceptSessionId = null, allInOrg = false }) {
+  if (!orgId || (!userId && !deviceId && !allInOrg)) throw new Error('endActiveSessions needs orgId and a userId or deviceId');
   const at = nowIso();
   return db.prepare(
     `UPDATE sessions SET state = 'ended', end_reason = ?, ended_at = ?
