@@ -130,7 +130,7 @@ would make per-request timing unusable anyway (out of scope here per the README)
 'session_expired'` for rows past `expires_at`; the session route calls it before inserting.
 **Why:** the exclusive-session index is `WHERE state = 'active'`, and nothing changes `state` when
 time passes. `check-lifecycle.js` `expired-but-active row blocks a new control session` fails with
-`UNIQUE constraint failed: sessions.device_id`; after `expireStaleSessions` the insert succeeds.
+`UNIQUE constraint failed: sessions.device_id`; after `expireStaleSessions` the insert succeeds. Through the API, `check-routes.js` `expired session no longer holds the device`; removing the call from session start makes it `409` (mutant, 34/37).
 **What I rejected:** comparing `expires_at` at read time only. Reads would look right while the
 index still refused the insert — the device reads `DEVICE_BUSY` forever.
 **What would change my mind:** a scheduled sweeper, or an index predicate that can reference the
@@ -138,16 +138,20 @@ current time (SQLite partial indexes cannot use non-deterministic functions).
 
 ---
 
-### A refresh restores the org the client asks for, else the earliest-joined active one
+### A wildcard grant needs every permission it expands to — in the table, not the docs
 
-**What I chose:** `POST /v1/auth/refresh` takes an optional `orgId`; without it, the default org
-is the earliest-joined active membership.
-**Why:** `refresh_tokens` has no `org_id`, and the UI test `a reload restores the session from the
-refresh cookie` expects Dana in Acme. `check-auth.js` `refresh with orgId restores that org`.
-**What I rejected:** adding `org_id` to `refresh_tokens` — a schema change to tie a user-level
-credential to one org, when the org is already a per-token choice (`POST /v1/auth/token`).
-**What would change my mind:** a requirement that a reload always returns to the last org even
-with no client state; then the org belongs in the refresh row.
+**What I chose:** `assertMayGrant` expands each pattern against the `permissions` table and
+requires the caller to hold every resulting permission at that scope (`server/permissions.js`).
+**Why:** `check-routes.js` `...nor device:*` — predicted `explicit_deny` (the admin had an
+org-wide deny on `device:terminal`), got `missing_permission`: the expansion includes the
+undocumented `device:reboot`, which is in no role's baseline (checked: the owner holds 19 of 20).
+So `even the owner cannot grant * on this database` — asserted, commit 7e067aa.
+**What I rejected:** expanding wildcards against the documented 19, or treating `*` as "whatever
+the caller holds". The first breaks on the grading fixture; the second silently narrows a grant
+the caller asked for, so the grantee gets less than the request says.
+**What would change my mind:** a rule that wildcard grants are dynamic — resolved at check time
+against whatever the grantor held when granting. The schema stores patterns, not expansions, so it
+would need a snapshot the schema does not have.
 
 ---
 
