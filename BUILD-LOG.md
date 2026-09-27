@@ -476,6 +476,20 @@ and `delete-org` are separate `Gated` controls, which is what separates owner fr
 that no longer exists, so the console re-reads via refresh and lands in another org or on
 sign-in. Added three session/audit cases to `console-extra.spec.js`; 5/5 with the two admin cases.
 
+### 2026-09-27 · step 6 — invite page, and the whole suite
+
+The invite flow ends on `login-form`, but accepting sets a refresh cookie (the API signs you in),
+so a boot-time refresh would have skipped straight past the form. The invite route skips that
+refresh; after accepting, the URL goes back to `/` and the form shows "You have joined …".
+A bad link renders only "not valid… expired, revoked or already used" — `a bad invite link is
+refused without leaking anything` greps the page for `Acme` and `org_acme`.
+Same problem as Phase 0 hit again: the `/^\/invite\/…/` regex went in through a shell heredoc and
+lost its backslashes; the Vite build failed on `/^/invite/…`. Fixed with a plain edit — the Phase 0
+rule ("no shell edits for anything with backslashes") was right and I broke it.
+Predicted the full run would pass, with test ordering (shared database, some cases mutate it) as
+the risk. `npx playwright test`: **31/31** — all 25 of `ui.spec.js` and the 6 in
+`console-extra.spec.js`, 36.8 s.
+
 ## Phase 8 — hardening
 
 _What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
