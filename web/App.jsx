@@ -9,6 +9,7 @@ import { Login } from './components/Login.jsx';
 import { allows } from './components/Gated.jsx';
 import { Devices } from './components/Devices.jsx';
 import { People } from './components/People.jsx';
+import { Grants } from './components/Grants.jsx';
 
 // Which permission shows which card (UI-INVENTORY.md §2). This is the inventory, not a
 // role table: the server still decides whether each permission is held.
@@ -40,6 +41,7 @@ function renderView(key, props) {
   switch (key) {
     case 'devices': return <Devices {...props} />;
     case 'people': return <People {...props} />;
+    case 'grants': return <Grants {...props} />;
     case undefined: return <p className="muted">Nothing here is available to you in this org.</p>;
     default: return <p className="muted">Coming next.</p>;
   }
