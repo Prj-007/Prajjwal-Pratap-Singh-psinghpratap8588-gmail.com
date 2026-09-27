@@ -218,6 +218,41 @@ Changed both allow branches in `decide` to `reason: null` and the one edge case 
 allow's reason — so it would have surfaced only in the hidden tier or the console's copy.
 Lesson: before claiming "the documents are silent", grep every document for the field name.
 
+## Phase 2d — auth routes
+
+### 2026-09-27 · first contact with check-api.js
+
+Predicted: login and switch-org pass; `no token -> 401` on `/orgs/org_acme/devices` fails, because
+the router answers 404 for an unregistered path before `authenticate()` ever runs. Observed
+exactly that, then the script aborted reading `members.map`. Caveat on the passes: the three
+"cross-org is INVISIBLE" checks are green only because the devices route does not exist — the
+404 comes from the router, not from `context.js`. They prove nothing until that route lands.
+
+### 2026-09-27 · measured: the enumeration oracle a missing compare would open
+
+Login returns the same 401 and message for a wrong password and an unknown email. Timed the two
+paths (20 runs each): wrong password 98.1 ms, unknown email with the dummy scrypt compare
+98.3 ms, unknown email with *no* compare 0.006 ms. Identical messages would not have helped: a
+four-orders-of-magnitude gap tells anyone which emails exist.
+
+### 2026-09-27 · refresh — what I had to decide
+
+- **A refresh token has no org.** `refresh_tokens` is `(user_id, family_id, …)`, no `org_id`, and
+  the test `a reload restores the session from the refresh cookie` expects Dana back in Acme.
+  Refresh takes an optional `orgId`, else the default org: earliest-joined *active* membership
+  (Acme for both Dana and Sam in the seed).
+- **Reuse.** A rotated token presented again revokes every live token in its family and clears the
+  cookie. `check-auth.js` proves the newest token of a family dies after an old one is replayed.
+- **Concurrent refresh.** Rotation is `UPDATE … WHERE id = ? AND revoked_at IS NULL` inside a
+  transaction; only the request that changes one row gets a new token.
+- **Cookie** `rt`, `HttpOnly; Secure; SameSite=Strict; Path=/v1/auth`. `Secure` over plain
+  `http://localhost` works because browsers treat localhost as a secure context — not verified in
+  a browser yet (no console exists); the UI suite will be the check.
+- **Suspended everywhere.** Login still issues a token for a suspended membership, so `/auth/me`
+  can show the empty set; a user with no active or suspended membership at all gets 401.
+
+`scripts/check-auth.js`: 24/24.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
