@@ -9,6 +9,7 @@
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createRouter } from './router.js';
 import { openDatabase } from './db.js';
@@ -19,7 +20,8 @@ import { registerRoutes } from './routes/index.js';
 const DEV = process.env.NODE_ENV !== 'production';
 const PORT = Number(process.env.PORT ?? 8080);
 const SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
-const DIST = new URL('../dist/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows .pathname is '/C:/...' and every static file 404s.
+const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
 
 const db = openDatabase();
 const router = createRouter();
@@ -29,6 +31,7 @@ registerRoutes(router, { db, secret: SECRET });
 const PUBLIC_ROUTES = new Set([
   'POST /v1/auth/login',
   'POST /v1/auth/refresh',
+  'POST /v1/auth/logout',
   'GET /v1/invites/:token',
   'POST /v1/invites/:token/accept',
 ]);

@@ -141,6 +141,18 @@ export function registerAuthRoutes(router, { db, secret }) {
     send(res, 200, withToken(db, secret, row.user_id, org, orgs));
   });
 
+  // Sign out: revoke the whole refresh family behind the cookie and clear it. Public, like
+  // refresh — it acts on the cookie, and an expired access token must not block signing out.
+  router.post('/v1/auth/logout', (ctx, _params, res) => {
+    const raw = readCookie(ctx.req, COOKIE);
+    if (raw) {
+      const row = db.prepare('SELECT family_id FROM refresh_tokens WHERE token_hash = ?').get(hashRefreshToken(raw));
+      if (row) db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL').run(nowIso(), row.family_id);
+    }
+    clearRefreshCookie(res);
+    send(res, 200, { signedOut: true });
+  });
+
   // Switch org: mint a token for another org the caller belongs to.
   router.post('/v1/auth/token', (ctx, _params, res) => {
     const { orgId } = ctx.body;
