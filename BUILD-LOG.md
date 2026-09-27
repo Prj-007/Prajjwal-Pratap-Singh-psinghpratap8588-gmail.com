@@ -450,6 +450,18 @@ Two entries that decide nothing server-side: `transfer-files` exists when `devic
 is held but there is no file-transfer API, so it says so; `add-device` offers the five kinds from
 the schema's CHECK as a convenience — the server's CHECK still decides.
 
+### 2026-09-27 · step 3 — people, and my own test hardcoded the documented roles
+
+A role picker needs the list of roles, and the console must not carry one. Added
+`GET /v1/orgs/:org/roles`: the `roles` table plus an `assignable` flag the server computes with
+`assertCanAssign`. The picker offers only assignable roles (plus the member's current one).
+Wrote `tests/console-extra.spec.js` for what `ui.spec.js` does not look inside. First run 2/3:
+`admin: the role picker never offers owner or admin` expected `['Operator', 'Auditor', 'Viewer']`
+and received `reviewer` as well — the personalised role (rank 35, below admin's 40), correctly
+assignable. The code was right; my test was the documented 5-role matrix the README warns about.
+Rewrote it to assert the rule (no Owner/Admin, Operator present), not a list. 3/3, and
+`check-orgs.js` gained two `/roles` cases (43/43).
+
 ## Phase 8 — hardening
 
 _What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
