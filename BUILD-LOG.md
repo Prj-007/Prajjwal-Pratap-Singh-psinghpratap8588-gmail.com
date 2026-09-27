@@ -437,6 +437,19 @@ Decisions in the shell:
 - **Nothing in web storage — not even the current org.** `no token is persisted` checks that
   `sessionStorage` has no keys at all, so a reload returns to the default org, not the last one.
 
+### 2026-09-27 · step 2 — devices, and where each entry's answer comes from
+
+Predicted all seven device cases would pass: the per-row entries read each row's own
+`permissions` from `GET /devices`, so the D6 grant (one Control on `globex-desk-01`), the kiosk's
+absence and Sam's missing Terminal all come from the server with no logic here. 7/7.
+The architecture case — intercept `GET /devices`, rewrite `device:control` to deny, navigate away
+and back — passes because `<main>` is keyed by `orgId:card`, so the Devices card remounts and
+refetches instead of reusing state. Keyed remount also carries the DOM-leak and two-tab cases:
+switching orgs throws the old org's rows away rather than filtering them.
+Two entries that decide nothing server-side: `transfer-files` exists when `device:file_transfer`
+is held but there is no file-transfer API, so it says so; `add-device` offers the five kinds from
+the schema's CHECK as a convenience — the server's CHECK still decides.
+
 ## Phase 8 — hardening
 
 _What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
