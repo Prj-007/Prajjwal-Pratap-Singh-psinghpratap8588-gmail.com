@@ -23,7 +23,7 @@ const BAD_LOGIN = 'invalid email or password';
 
 // Memberships the caller can see in the org switcher: active or suspended, in live orgs.
 // Earliest joined first — that order also picks the default org.
-function myOrgs(db, userId) {
+export function myOrgs(db, userId) {
   return db.prepare(
     `SELECT o.id, o.name, o.theme, m.role, m.status, m.perm_version
        FROM memberships m JOIN organizations o ON o.id = m.org_id

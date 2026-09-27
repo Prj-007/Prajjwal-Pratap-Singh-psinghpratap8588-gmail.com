@@ -10,3 +10,4 @@ dist/
 test-results/
 playwright-report/
 check-auth.db*
+check-orgs.db*

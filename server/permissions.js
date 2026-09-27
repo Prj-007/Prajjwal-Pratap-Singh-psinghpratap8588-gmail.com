@@ -170,6 +170,15 @@ export function assertCan(db, ctx, permission, deviceId) {
   if (a.effect !== 'allow') throw forbidden(`${permission} is not allowed`, refusal(a));
 }
 
+// The strict org scope: org-wide grants and the role only, never "some device allows".
+// For actions that are not about one existing device (creating one, transferring into an
+// org) — the union would let a single device-scoped grant act for the whole org.
+export function assertCanOrgWide(db, ctx, permission) {
+  const loaded = load(db, ctx.userId, ctx.orgId, ctx.now ?? new Date());
+  const a = evaluate(loaded, 'org').permissions[permission] ?? answer('deny', null, 'implicit');
+  if (a.effect !== 'allow') throw forbidden(`${permission} is not allowed org-wide`, refusal(a));
+}
+
 // No privilege laundering: you may only grant authority you hold at that scope.
 // An org-wide grant is checked against the org scope ONLY — not the union — or a caller
 // allowed on a single device could hand the same permission out across the whole org.
