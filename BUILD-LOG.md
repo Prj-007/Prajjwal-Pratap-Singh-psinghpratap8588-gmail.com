@@ -207,6 +207,17 @@ does not hold. Rank never answers "may you", only "may you, over them".
 
 32/32 first run. No wrong prediction this round; the risk is in how the routes use these.
 
+### 2026-09-27 · wrong: "the documents leave allow provenance open"
+
+Phase 2 above says tests only pin the grant form, so `reason: role` / `reason: grant` was my
+choice. Reading `BRIEF.md §5.2` for the auth routes: its example is
+`{ "effect": "allow", "source": "role:operator", "reason": null }`. It was specified; I had read
+`PERMISSIONS.md` and the tests, not the brief's response shapes. `reason` is for denies only.
+Changed both allow branches in `decide` to `reason: null` and the one edge case that asserted
+`'grant'`. All suites unchanged in count. Nothing public caught it — `check-api.js` never reads an
+allow's reason — so it would have surfaced only in the hidden tier or the console's copy.
+Lesson: before claiming "the documents are silent", grep every document for the field name.
+
 ## Phase 3 — orgs, members, invites
 
 _Anything you had to work out that no document states. Invite lifecycle states are a common
