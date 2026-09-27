@@ -11,3 +11,4 @@ test-results/
 playwright-report/
 check-auth.db*
 check-orgs.db*
+check-routes.db*

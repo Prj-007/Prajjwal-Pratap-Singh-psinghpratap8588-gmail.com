@@ -85,6 +85,15 @@ function storeRefresh(db, userId, familyId) {
   return raw;
 }
 
+// Log a user in to one org: a new refresh family (cookie) and the login response body.
+// Used by accepting an invite, which ends signed in to the org just joined.
+export function startSession(db, secret, res, userId, orgId) {
+  const orgs = myOrgs(db, userId);
+  const org = orgs.find((o) => o.id === orgId);
+  setRefreshCookie(res, storeRefresh(db, userId, newId('fam')));
+  return withToken(db, secret, userId, org, orgs);
+}
+
 export function registerAuthRoutes(router, { db, secret }) {
   router.post('/v1/auth/login', (ctx, _params, res) => {
     const { email, password, orgId } = ctx.body;

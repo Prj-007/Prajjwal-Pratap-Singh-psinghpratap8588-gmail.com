@@ -182,6 +182,31 @@ export function registerOrgRoutes(router, { db }) {
     send(res, 200, { userId: target.userId, status: 'removed' });
   }));
 
+  // --- audit -----------------------------------------------------------------------
+
+  // limit 1–500 (default 50), offset ≥ 0 (default 0). Out of range is a 400, not a silent
+  // clamp; an offset past the end is simply an empty page.
+  function pageParam(ctx, key, fallback, min, max) {
+    const raw = ctx.query.get(key);
+    if (raw === null) return fallback;
+    if (!/^-?\d+$/.test(raw)) throw badRequest(`${key} must be an integer`);
+    const n = Number(raw);
+    if (n < min || n > max) throw badRequest(`${key} must be between ${min} and ${max}`);
+    return n;
+  }
+
+  router.get('/v1/orgs/:org/audit', audited({ action: 'audit.read' }, (ctx, _p, res) => {
+    assertCanOrgWide(db, ctx, 'audit:read');
+    const limit = pageParam(ctx, 'limit', 50, 1, 500);
+    const offset = pageParam(ctx, 'offset', 0, 0, Number.MAX_SAFE_INTEGER);
+    const events = db.prepare(
+      `SELECT id, org_id, actor_id, action, target_type, target_id, result, reason_code, request_id, at
+         FROM audit_events WHERE org_id = ? ORDER BY at DESC, id DESC LIMIT ? OFFSET ?`
+    ).all(ctx.orgId, limit, offset);
+    const { total } = db.prepare('SELECT count(*) AS total FROM audit_events WHERE org_id = ?').get(ctx.orgId);
+    send(res, 200, { events, limit, offset, total });
+  }));
+
   // --- effective permissions -----------------------------------------------------
 
   // Org-level by default; ?deviceId= gives the exact per-device set.
