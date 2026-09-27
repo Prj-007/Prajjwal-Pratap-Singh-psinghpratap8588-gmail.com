@@ -38,3 +38,4 @@ code { font-size: 12px; }
 .pill.allow { background: #e6f5ea; color: #1c6b34; }
 .pill.online { background: #e6f5ea; color: #1c6b34; }
 @media (max-width: 700px) { .layout { grid-template-columns: 1fr; } }
+.notice.ok { background: #effaf2; border-color: #bfe3ca; color: #1c5b30; }

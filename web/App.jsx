@@ -6,6 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import * as client from './api.js';
 import { Login } from './components/Login.jsx';
+import { allows } from './components/Gated.jsx';
+import { Devices } from './components/Devices.jsx';
 
 // Which permission shows which card (UI-INVENTORY.md §2). This is the inventory, not a
 // role table: the server still decides whether each permission is held.
@@ -31,13 +33,22 @@ function palette(theme) {
   return { bg: `hsl(${h} 60% 93%)`, accent: `hsl(${h} 60% 35%)` };
 }
 
-export const allowed = (perms, key) => perms?.[key]?.effect === 'allow';
+// One component per card. Each mounts fresh when the org or the card changes (the key on
+// <main>), so it refetches — nothing from the previous org can linger in the DOM.
+function renderView(key, props) {
+  switch (key) {
+    case 'devices': return <Devices {...props} />;
+    case undefined: return <p className="muted">Nothing here is available to you in this org.</p>;
+    default: return <p className="muted">Coming next.</p>;
+  }
+}
 
 export function App() {
   const [session, setSession] = useState(null);
   const [booting, setBooting] = useState(true);
   const [view, setView] = useState('devices');
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState(null);       // { text, kind: 'error' | 'ok' }
+  const say = (text, kind = 'error') => setNotice({ text, kind });
 
   // A reload: try the refresh cookie before showing the sign-in form.
   useEffect(() => {
@@ -45,16 +56,16 @@ export function App() {
   }, []);
 
   if (booting) return null;
-  if (!session) return <Login onSignedIn={(s) => { setSession(s); setView('devices'); }} notice={notice} />;
+  if (!session) return <Login onSignedIn={(s) => { setSession(s); setView('devices'); setNotice(null); }} notice={notice?.text} />;
 
-  const can = (key) => allowed(session.permissions, key);
+  const can = (key) => allows(session.permissions, key);
   const cards = CARDS.filter((c) => c.show(can));
   const current = cards.some((c) => c.key === view) ? view : cards[0]?.key;
   const colours = palette(session.org.theme);
 
   async function choose(id) {
     setNotice(null);
-    try { setSession(await client.switchOrg(id)); } catch (err) { setNotice(err.message); }
+    try { setSession(await client.switchOrg(id)); } catch (err) { say(err.message); }
   }
 
   async function createOrg() {
@@ -64,7 +75,7 @@ export function App() {
       const org = await client.api('POST', '/orgs', { name });
       setSession(await client.switchOrg(org.id));
       setView('devices');
-    } catch (err) { setNotice(err.message); }
+    } catch (err) { say(err.message); }
   }
 
   async function signOut() {
@@ -102,7 +113,7 @@ export function App() {
         <button data-testid="sign-out" className="ghost" onClick={signOut}>Sign out</button>
       </header>
 
-      {notice && <p className="notice" role="alert">{notice}</p>}
+      {notice && <p className={notice.kind === 'ok' ? 'notice ok' : 'notice'} role="alert">{notice.text}</p>}
 
       <div className="layout">
         <nav className="cards" aria-label="Sections">
@@ -113,7 +124,7 @@ export function App() {
           ))}
         </nav>
         <main className="panel" key={`${session.orgId}:${current}`}>
-          {current ? <p className="muted">{cards.find((c) => c.key === current).label}</p> : <p className="muted">Nothing here is available to you in this org.</p>}
+          {renderView(current, { orgId: session.orgId, orgPerms: session.permissions, session, say })}
         </main>
       </div>
     </div>
