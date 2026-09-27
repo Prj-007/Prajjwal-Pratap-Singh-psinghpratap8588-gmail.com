@@ -258,10 +258,67 @@ four-orders-of-magnitude gap tells anyone which emails exist.
 _Anything you had to work out that no document states. Invite lifecycle states are a common
 source of this._
 
+### 2026-09-27 · orgs and members routes — owner vs owner
+
+Read ahead in `check-api.js` before writing: `demoting a NON-last owner is allowed` has Dana
+(owner) demote another owner and expects 200. `assertCanModify` from Phase 2c refuses equal
+ranks. Predicted that check would fail. `check-api.js` aborts before reaching it (no sessions
+route yet), so wrote `scripts/check-orgs.js`; it failed exactly there:
+`got "403 FORBIDDEN insufficient_rank" want 200`. Phase 2c's "strictly above" was right for admin →
+admin and wrong for owner → owner — with it, a second owner could never be demoted by anyone.
+Changed: equal rank refused except for the top role (same exception `assertCanAssign` already
+had). The rule I wrote down in Phase 2c came from §6's table, which only shows admin → admin.
+
+### 2026-09-27 · three wrong expectations in my own test
+
+`check-orgs.js` first run: 33/38. One real bug (above) plus its pv follow-on; the other three
+were the test being wrong, each for a reason worth keeping:
+- `admin cannot modify admin` returned `SELF_ROLE_CHANGE` — the seed has one admin, so the test
+  had him edit himself. Added a second admin (owner promotes the viewer) and asserted both.
+- `a fresh token is refused as suspended` returned 404 — after Sam is suspended in Acme, a plain
+  login's default org skips the suspended membership and lands in Globex, so the "fresh" token
+  was for the wrong org. Correct behaviour; the test now logs in with `orgId: 'org_acme'` and
+  separately asserts the Globex landing.
+- `removed user's token` returned `401 UNAUTHENTICATED`, not `TOKEN_STALE` — `context.js` checks
+  membership status before freshness, so removal wins. That is the order Phase 2b chose.
+41/41 after. `check-api.js` unchanged at 16 passes; every remaining failure is a 404 from the
+audit or sessions routes.
+
+### 2026-09-27 · left open — settled here
+
+- **Org-level actions use the strict org scope** (`assertCanOrgWide`, new in `permissions.js`),
+  never the union: a device-scoped grant must not authorise managing people or the org.
+  Known gap: `/auth/me` shows the union, so a device-scoped grant of a *non-device* permission
+  (e.g. `audit:read` on one device) would light up nav that the API then refuses. Left open.
+- **Suspend / remove yourself** → 403 reason `self`; leaving is `DELETE /members/me`.
+- **Suspend and reinstate are idempotent** — suspending a suspended member is 200, not 409.
+- **Org delete** is a soft delete and ends every live session in the org (`allInOrg: true`,
+  reason `admin_terminated` — there is no org-deleted end reason in the schema).
+
 ## Phase 4 — devices and grants
 
 _What happens at the boundary where two grants disagree, or where a grant's scope and the
 question's scope differ? Say what you predicted and what you got._
+
+### 2026-09-27 · devices routes
+
+Predicted `check-api.js`: `no token -> 401` flips to pass (the route now exists, so
+`authenticate()` runs instead of the router's 404), the three D6 checks and both row-inclusion
+checks pass. All five did. The cross-org 404s are now produced by `context.js`, so they mean
+something for the first time.
+
+Decisions no document settles:
+- **A device you cannot view is 404 on its detail, update, delete and transfer** — the same
+  answer the list gives by leaving it out. A 403 would confirm it exists.
+- **Creating a device needs `device:provision` org-wide**, not "on some device" — same laundering
+  argument as `assertMayGrant`.
+- **Kinds are not listed in the route.** Insert and translate `SQLITE_CONSTRAINT_CHECK` to 400; the
+  schema's `CHECK (kind IN …)` stays the only list. `check-orgs.js` `bad kind -> 400`.
+- **Names unique among an org's live devices** (409). No index in the schema, so the check runs
+  in the same transaction as the insert; one process, one transaction at a time.
+- **Transfer revokes the old org's grants on the device** and bumps each holder's `pv`; otherwise a
+  grant would keep naming a device that is no longer in its org. Live sessions end
+  `device_transferred`. Needs provision on the device here and org-wide in the target.
 
 ## Phase 5 — sessions
 
