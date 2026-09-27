@@ -404,6 +404,39 @@ an offset past the end is an empty page — the six boundary cases in `check-api
 
 _Where did the server's answer and your instinct disagree about what should be on screen?_
 
+### 2026-09-27 · step 1 — three things stood between the console and its first test
+
+1. **Wrong browser build.** First `npx playwright test`: every case failed in 11 ms with
+   `Executable doesn't exist at …\chromium_headless_shell-1243\…`. This machine had build 1228;
+   `@playwright/test` 1.63 wants 1243. `npx playwright install chromium` (114.6 MiB).
+2. **The Phase 0 open thread came due.** Then every case timed out at 30 s, sign-in included — the
+   page never rendered. `curl http://localhost:8131/` against a production-mode server:
+   `HTTP 404 {"error":{"code":"NOT_FOUND"…}}`. `server/index.js:22` builds `DIST` with
+   `.pathname`, so on Windows the static handler looked in `/C:/…/dist/` and fell through to 404.
+   Phase 0 logged it as "only hit by `npm start`"; the UI suite runs the server with
+   `NODE_ENV=production`, so it blocked every UI test. Same `fileURLToPath` fix (9b54e2b).
+3. **Build before test.** `playwright.config.js` says "`npm test` builds the SPA first", but
+   `package.json` `test` is just `playwright test` and the web server serves `dist/`. A UI test run
+   against a stale or missing build tests old code. Running `npm run build` before every UI run.
+
+After those: 9/9 for the shell, nav and sign-in cases. `a reload restores the session from the
+refresh cookie` passing settles what Phase 2d left unverified — Chromium accepts the `Secure`
+refresh cookie on plain `http://localhost`.
+
+Decisions in the shell:
+- **`CARDS` in `App.jsx` is the inventory, not a role table.** It maps card → permission
+  (UI-INVENTORY §2); whether the permission is held is the server's `permissions` from
+  `/auth/me`-shaped login responses. The architecture test (server says deny → element vanishes)
+  is what checks this.
+- **Unknown themes get a colour hashed from the name**, so a grading org with a theme nobody
+  listed still renders distinctly from the others (the "switching orgs changes the background"
+  case measures `backgroundColor`).
+- **Sign-out needed a server route.** Dropping the in-memory token alone left the refresh cookie,
+  so a reload would sign straight back in. Added public `POST /v1/auth/logout`: revokes the cookie's
+  family, clears it.
+- **Nothing in web storage — not even the current org.** `no token is persisted` checks that
+  `sessionStorage` has no keys at all, so a reload returns to the default org, not the last one.
+
 ## Phase 8 — hardening
 
 _What did you measure, what did you fix, and what did you deliberately leave alone? Anything you
@@ -414,7 +447,7 @@ chose not to build belongs here with its reason._
 _Things you know are wrong, unfinished, or that you would do differently with another day. Listing
 these honestly is worth more than pretending they do not exist — we will find them anyway._
 
-- `server/index.js:22` — `DIST` uses `new URL(...).pathname`, the same bug fixed in `load-db.js`.
-  Only hit by `npm start` (production static serving) on Windows. Not fixed yet.
+- ~~`server/index.js:22` — `DIST` uses `.pathname`~~ — fixed in 9b54e2b; it blocked every UI test,
+  not just `npm start` (Phase 7, step 1).
 - `package.json` scripts assume a POSIX shell: `db:reset` uses `rm -f`, `start` uses
   `NODE_ENV=production node ...`. `rm` worked here only because Git's `rm` is on PATH.
