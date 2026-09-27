@@ -151,6 +151,52 @@ with no client state; then the org belongs in the refresh row.
 
 ---
 
+### Equal rank cannot modify equal rank — except owners, who can act on owners
+
+**What I chose:** `assertCanModify` allows a strictly higher rank, and the top-ranked role acting
+on itself; every other equal pair is `403 insufficient_rank` (`server/lifecycle.js`).
+**Why:** first built as "strictly above" from `PERMISSIONS.md §6` (admin → admin is 403). Read
+`check-api.js` `demoting a NON-last owner is allowed` — owner demotes owner, expects 200 — and
+predicted a failure. `check-orgs.js` `owner demotes another owner (two owners)` failed with
+`403 FORBIDDEN insufficient_rank`; passed after the change in eb6ad78. `admin cannot modify another
+admin (equal)` still returns 403.
+**What I rejected:** "strictly above" everywhere — with it a second owner can never be demoted by
+anyone, only leave. Also rejected "equal is fine everywhere" — admins could then demote each other.
+**What would change my mind:** a rule that demoting an owner needs the owner's own consent, or a
+separate transfer-ownership flow; then owner → owner would be refused here and handled there.
+
+---
+
+### Org-level and people actions use the strict org scope, never the org-level union
+
+**What I chose:** routes for members, invites-to-come and the org itself call
+`assertCanOrgWide` (org-wide grants and the role only); the union is used only for navigation
+(`/auth/me`) and `device:list`.
+**Why:** same argument as `assertMayGrant`: under the union, a grant of `user:remove` scoped to a
+single device would let someone suspend members of the whole org. `check-orgs.js` covers the
+refusals (`viewer cannot change roles`, `admin cannot delete the org`, `operator cannot provision`).
+**What I rejected:** `assertCan(…)` with no device, which resolves the union. Simpler, and it turns
+any device-scoped grant into org authority.
+**What would change my mind:** seeing that device-scoped grants of non-device permissions cannot
+exist. They can today (`grant_permissions` accepts any pattern on any grant), and the known gap is
+the reverse: `/auth/me` shows the union, so such a grant would light up navigation the API refuses.
+
+---
+
+### A device the caller cannot view is a 404 on every route, not a 403
+
+**What I chose:** `visible()` in `server/routes/devices.js` returns 404 unless the device is live in
+this org *and* `device:view` resolves to allow on it; detail, update, delete and transfer all go
+through it before checking their own permission.
+**Why:** the list already leaves such a device out (`check-api.js` `kiosk-lobby-01 is ABSENT (not
+redacted)`). A 403 on the detail route would confirm what the list hides.
+**What I rejected:** 403 when the device exists but `device:view` is denied — the reading of
+`PERMISSIONS.md §5` "you can see it but lack the permission". Seeing it *is* `device:view` here.
+**What would change my mind:** a requirement that denials on hidden devices appear in the audit
+log — `auditDenials` records only 403s, so these 404s are not audited.
+
+---
+
 ## Where this repo argues with itself
 
 **1. The verifier is asked to check something it cannot see.**
@@ -171,7 +217,14 @@ the grant's own org (`activeGrants` in `permissions.js`).
 `PERMISSIONS.md §4`: "`*` to all nineteen". The personalised database has 20 (`device:reboot`).
 Built against the table: wildcards expand against `permissions` at runtime.
 
-**4. My own wrong reading, corrected.**
+**4. "Equal role → 403" versus a test where an owner demotes an owner.**
+`PERMISSIONS.md §6`: "modify a user of equal role (admin → admin) | `403`". `scripts/check-api.js`:
+`demoting a NON-last owner is allowed` — Dana (owner) sets `usr_acme_owner` (owner) to viewer and
+expects 200. Built against the test for the top role only: owners may act on owners, every other
+equal pair is 403. The table's own example is admin → admin, and the last-owner rule (§6, same
+table) only makes sense if an owner can demote an owner.
+
+**5. My own wrong reading, corrected.**
 Claimed in the Phase 2 log that allow provenance was unspecified and returned `reason: 'role'` /
 `'grant'`. `BRIEF.md §5.2` shows `{ "effect": "allow", "source": "role:operator", "reason": null }`.
 Not a contradiction in the repo — a miss on my side, fixed in d027675 and logged.
