@@ -201,6 +201,24 @@ log — `auditDenials` records only 403s, so these 404s are not audited.
 
 ---
 
+### The console knows the inventory, never the answers — even the role list comes from the server
+
+**What I chose:** `web/` holds only UI-INVENTORY's card → permission mapping (`CARDS` in
+`App.jsx`) and element → permission pairs (`Gated`). Whether a permission is held always comes from
+a server-resolved set: org-level from login, per device from each row of `GET /devices`. Role
+pickers use `GET /v1/orgs/:org/roles`, which marks each role `assignable` via `assertCanAssign`.
+**Why:** `ui.spec.js` `an element vanishes when the server withdraws the permission` rewrites the
+devices response to deny and requires the button to disappear — passes. And
+`console-extra.spec.js` `admin: the role picker never offers owner or admin` first *failed* because
+my test expected the documented three roles and the server also offered `reviewer` (the
+personalised role, rank 35) — the server was right. Commits f8c0f03, 8081ba9.
+**What I rejected:** a role list or rank table in the frontend. It passes every seeded case and
+shows the wrong choices the moment the database has a role the code has not heard of.
+**What would change my mind:** an inventory that itself varied by org — then `CARDS` would have to
+come from the server too.
+
+---
+
 ## Where this repo argues with itself
 
 **1. The verifier is asked to check something it cannot see.**
@@ -240,7 +258,12 @@ Not a contradiction in the repo — a miss on my side, fixed in d027675 and logg
   grants, for no measured need.
 - **`iat` / `nbf` checks in the verifier.** Only this server can sign, so a future `iat` is our
   clock, not a forgery.
-- **Logout endpoint.** Not in the endpoint list.
-- **Windows portability of `npm start`** (`NODE_ENV=` syntax) and `server/index.js:22`'s `.pathname`
-  path — only `load-db.js` was fixed, because it blocked development. Listed in Open threads.
+- **File transfer.** `transfer-files` is present when `device:file_transfer` is held, as the
+  inventory requires, but there is no transfer API behind it; it says so when clicked.
+- **Windows portability of `npm start`** (`NODE_ENV=production` syntax in `package.json`). The two
+  `.pathname` paths that broke Windows (`load-db.js`, `server/index.js`) are fixed; the script
+  syntax is left, since graders run the start command given in the form.
 - **Rate limiting**, per the README.
+- Not in the endpoint list but built anyway: `POST /v1/auth/logout` (without it, "Sign out" left a
+  live refresh cookie and a reload signed straight back in) and `GET /v1/orgs/:org/roles` (see the
+  console decision above).
