@@ -320,7 +320,68 @@ Decisions no document settles:
   grant would keep naming a device that is no longer in its org. Live sessions end
   `device_transferred`. Needs provision on the device here and org-wide in the target.
 
+### 2026-09-27 · grants — `device:*` is refused on a permission nobody holds
+
+`check-routes.js` first run: `...nor device:*` expected `explicit_deny` (the admin had just been
+denied `device:terminal` org-wide) and got `missing_permission`. Wrong prediction, and the reason is
+the personalised catalogue: `device:*` expands against `permissions`, which includes
+`device:reboot`, and `assertMayGrant` walks the expansion in key order — `device:reboot` comes
+before `device:terminal` and is simply not held. Checked the database: no role's baseline contains
+`device:reboot`; the owner holds 19 of 20. So on this fixture nobody can grant `*` or `device:*`,
+owners included. That is "you may only grant what you hold" applied to a catalogue the documents
+never listed; kept, and asserted (`even the owner cannot grant * on this database`).
+
+Also: `normalizeTs` earns its place — an `expiresAt` sent as `…+00:00` is stored as `…Z`, so
+the text comparison in the resolution query still orders it correctly (asserted).
+
 ## Phase 5 — sessions
+
+### 2026-09-27 · the whole of check-api.js
+
+Predicted all of `check-api.js` would pass once every endpoint existed, with the grandfathering
+block (demote Sam mid-session → session survives, next start 401, suspension ends it) as the
+likeliest surprise. 66/66 first run.
+
+### 2026-09-27 · a visibility rule I wrote inconsistently, caught on reread
+
+First draft of session start: a device you cannot view → 404, *unless* `mode` is `view`, in which
+case the compound check answered `403 missing_device_permission`. That 403 confirms the hidden
+device exists — the leak the 404 is for. Caught rereading before any test ran; now 404 for any
+mode. `check-routes.js` `viewer on the kiosk they cannot view -> 404`.
+
+### 2026-09-27 · the expired session, end to end
+
+Phase 2c proved the trap on a bare table. Now through the API: `check-routes.js` ages Sam's live
+control session with a second connection (`expires_at` one second ago, `state` still `active`)
+and starts Dana's terminal session on the same device: 201, and Sam's session reads
+`session_expired`. Mutant — remove `expireStaleSessions` from session start: 34/37, the start
+returns `409` (DEVICE_BUSY) — the expired row still owned the device.
+
+### 2026-09-27 · left open — settled here
+
+- **DEVICE_BUSY names the holder in `message`.** §7 says "with the holder's session id"; the error
+  body shape is fixed (`code, message, reason, requestId`), so the id goes in the message rather
+  than a new field.
+- **`GET /v1/sessions/:id` has no org in the path.** The session must be in the token's org, else
+  404 — the same structural rule as `:org`, applied by lookup.
+- **Ending an already-ended session** returns it unchanged with 200 (idempotent, no second audit row).
+
+## Phase 3b — invites
+
+### 2026-09-27 · what an invite link may do
+
+- **Existing account.** If the invited email already has a user, accepting requires that
+  account's password (401 otherwise). Without it, anyone holding the link attaches a membership to
+  someone else's account. `check-routes.js` covers both.
+- **Removed member re-invited**: same membership row, new role, `status = 'active'`, `pv` bumped.
+- **TTL 7 days**; revoked or expired link → 410 on peek and accept; used link → 410 on peek,
+  409 on accept (the test asks for 409 on reuse).
+- **Accept signs you in** to the org you joined (new refresh family, same body as login).
+- Peek returns org name, email, role, expiry — no ids (`check-api.js` `...leaks NO org id`).
+
+`check-routes.js`: 37/37 (3 of the first run's 36 checks were my expectations, not the code — the
+`device:*` case above, a token that had gone stale when its deny was revoked, and a count that
+followed from the first).
 
 _Two permissions, one device. What did you have to resolve, and in what order, to keep the two
 failure reasons distinguishable?_
@@ -328,6 +389,16 @@ failure reasons distinguishable?_
 ## Phase 6 — audit
 
 _What did you decide counts as an auditable event, and what pushed you to that line?_
+
+### 2026-09-27 · the line
+
+Every successful change (org, member, device, grant, session start/end, invite) writes one `allow`
+row inside its own transaction; every 403 writes one `deny` row with its reason via
+`auditDenials`. Reads are not audited when they succeed; a refused read is (Sam's 403 on
+`GET /audit` is a `deny` row, which is what `check-api.js` `...contains denials` finds).
+404s are not audited — they are about resources the caller cannot see (DECISIONS: hidden device).
+Pagination: `limit` 1–500 (default 50), `offset` ≥ 0; non-integers and out-of-range are 400,
+an offset past the end is an empty page — the six boundary cases in `check-api.js` pass.
 
 ## Phase 7 — the console
 
